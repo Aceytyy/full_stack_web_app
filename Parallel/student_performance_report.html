@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Student Performance Report</title>
+  <script src="https://cdn.jsdelivr.net/npm/vue@3.4.15/dist/vue.global.prod.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/axios@1.6.8/dist/axios.min.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f4f4f4;
+      padding: 30px;
+    }
+    .container {
+      background: white;
+      max-width: 1000px;
+      margin: auto;
+      padding: 30px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+    }
+    h2 {
+      margin-bottom: 20px;
+    }
+    input, button {
+      padding: 8px;
+      margin: 5px 0;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 20px;
+    }
+    table th, table td {
+      padding: 10px;
+      border: 1px solid #ccc;
+    }
+    .bar-bg {
+      background: #ddd;
+      height: 20px;
+      width: 100%;
+      position: relative;
+    }
+    .bar-fill {
+      background: #4caf50;
+      height: 100%;
+    }
+    .metrics {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 20px;
+    }
+    .metrics div {
+      width: 33%;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <div id="app" class="container">
+    <h2>Student Performance Report</h2>
+
+    <input v-model="studentId" type="number" placeholder="Enter Student ID" />
+    <button @click="onSearch">Search</button>
+
+    <select v-if="semesters.length" v-model="selectedSemester" @change="onSemesterChange">
+      <option v-for="sem in semesters" :value="sem.semester_id">
+        {{ sem.semester }} - {{ sem.school_year }}
+      </option>
+    </select>
+
+    <div v-if="student">
+      <h3>Student Name: {{ student.name }}</h3>
+
+      <div class="metrics">
+        <div><strong>GPA</strong><br>{{ student.gpa }}</div>
+        <div><strong>Z Score</strong><br>{{ student.zscore }}</div>
+        <div>
+          <strong>GPA vs Class Avg</strong><br>
+          <div class="bar-bg">
+            <div class="bar-fill" :style="{ width: barWidth + '%' }"></div>
+          </div>
+        </div>
+      </div>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Subject Code</th>
+            <th>Description</th>
+            <th>Student Grade</th>
+            <th>Class Average</th>
+            <th>Rate</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="row in student.subjects" :key="row.code">
+            <td>{{ row.code }}</td>
+            <td>{{ row.description }}</td>
+            <td>{{ row.grade }}</td>
+            <td>{{ row.class_average }}</td>
+            <td>{{ row.rate }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <script>
+    const { createApp } = Vue;
+    createApp({
+      data() {
+        return {
+          studentId: '',
+          student: null,
+          semesters: [],
+          selectedSemester: null
+        };
+      },
+      computed: {
+        barWidth() {
+          if (!this.student) return 0;
+          const gpa = this.student.gpa || 0;
+          const avg = this.student.class_average || 1;
+          return Math.min(100, Math.max(0, (gpa / avg) * 100));
+        }
+      },
+      methods: {
+        async fetchSemesters() {
+          if (!this.studentId) return;
+          const res = await axios.get(`get_student_semesters.php?student_id=${this.studentId}`);
+          this.semesters = res.data;
+          if (this.semesters.length > 0) {
+            this.selectedSemester = this.semesters[0].semester_id;
+            this.fetchStudent(this.selectedSemester);
+          }
+        },
+        async fetchStudent(semesterId = null) {
+          if (!this.studentId) return alert("Please enter a student ID.");
+          let url = `student_details.php?student_id=${this.studentId}`;
+          if (semesterId) url += `&semester_id=${semesterId}`;
+          try {
+            const res = await axios.get(url);
+            this.student = res.data;
+          } catch (err) {
+            alert("Student not found or error fetching data.");
+            this.student = null;
+          }
+        },
+        onSemesterChange() {
+          this.fetchStudent(this.selectedSemester);
+        },
+        onSearch() {
+          this.fetchSemesters();
+        }
+      }
+    }).mount("#app");
+  </script>
+</body>
+</html>

@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Real-Time Grade Update Stream</title>
+  <script src="https://cdn.jsdelivr.net/npm/vue@3.4.15/dist/vue.global.prod.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/axios@1.6.8/dist/axios.min.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f4f4f4;
+      padding: 30px;
+    }
+    .container {
+      background: white;
+      max-width: 900px;
+      margin: auto;
+      padding: 30px;
+      box-shadow: 0 0 5px rgba(0,0,0,0.1);
+    }
+    h2 {
+      margin-bottom: 20px;
+    }
+    input, select, button {
+      padding: 8px;
+      margin: 5px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 20px;
+    }
+    table th, table td {
+      padding: 10px;
+      border: 1px solid #ccc;
+    }
+    .edit-modal {
+      background: rgba(0,0,0,0.5);
+      position: fixed;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .edit-box {
+      background: white;
+      padding: 20px;
+      min-width: 300px;
+      border-radius: 5px;
+    }
+  </style>
+</head>
+<body>
+  <div id="app" class="container">
+    <h2>Real-Time Grade Update Stream</h2>
+
+    <div>
+      <input v-model="studentId" type="number" placeholder="Enter Student ID" />
+      <button @click="onSearch">Search</button>
+    </div>
+
+    <select v-if="semesters.length" v-model="selectedSemester" @change="onSemesterChange">
+      <option v-for="sem in semesters" :value="sem.semester_id">
+        {{ sem.semester }} - {{ sem.school_year }}
+      </option>
+    </select>
+
+    <div v-if="student">
+      <h3>Student ID: {{ student.student_id }} | Name: {{ student.name }}</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Subject</th>
+            <th>Description</th>
+            <th>Grade</th>
+            <th>Edit</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="subject in student.subjects" :key="subject.code">
+            <td>{{ subject.code }}</td>
+            <td>{{ subject.description }}</td>
+            <td>{{ subject.grade }}</td>
+            <td><button @click="openEdit(subject)">Edit</button></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div v-if="showModal" class="edit-modal">
+      <div class="edit-box">
+        <h4>Edit Grade - {{ selectedSubject.code }}</h4>
+        <p>Previous Grade: {{ selectedSubject.grade }}</p>
+        <label>New Grade:
+          <input type="number" v-model="newGrade" min="0" max="100" step="0.01"/>
+        </label>
+        <br>
+        <label>Email Address:
+          <input type="email" v-model="email" placeholder="example@email.com"/>
+        </label>
+        <br>
+        <button @click="submitGradeUpdate">Submit</button>
+        <button @click="showModal = false">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const { createApp } = Vue;
+
+    createApp({
+      data() {
+        return {
+          studentId: '',
+          student: null,
+          showModal: false,
+          selectedSubject: {},
+          newGrade: '',
+          email: '',
+          semesters: [],
+          selectedSemester: null
+        }
+      },
+      computed: {
+        barWidth() {
+          if (!this.student) return 0;
+          const gpa = this.student.gpa || 0;
+          const avg = this.student.class_average || 1;
+          return Math.min(100, Math.max(0, (gpa / avg) * 100));
+        }
+      },
+      methods: {
+        async fetchSemesters() {
+          if (!this.studentId) return;
+          const res = await axios.get(`get_student_semesters.php?student_id=${this.studentId}`);
+          this.semesters = res.data;
+          if (this.semesters.length > 0) {
+            this.selectedSemester = this.semesters[0].semester_id;
+            await this.fetchStudent(this.selectedSemester);
+          } else {
+            this.selectedSemester = null;
+            this.student = null;
+          }
+        },
+        async fetchStudent(semesterId = null) {
+          if (!this.studentId) return alert("Please enter a student ID.");
+          let url = `student_details.php?student_id=${this.studentId}`;
+          if (semesterId) url += `&semester_id=${semesterId}`;
+          try {
+            const res = await axios.get(url);
+            this.student = res.data;
+          } catch (err) {
+            alert("Student not found or error fetching data.");
+            this.student = null;
+          }
+        },
+        onSemesterChange() {
+          this.fetchStudent(this.selectedSemester);
+        },
+        onSearch() {
+          this.fetchSemesters();
+        },
+        openEdit(subject) {
+          this.selectedSubject = subject;
+          this.newGrade = subject.grade;
+          this.email = '';
+          this.showModal = true;
+        },
+        async submitGradeUpdate() {
+          if (!this.newGrade || !this.email) {
+            alert('Please enter all fields');
+            return;
+          }
+          try {
+            const payload = {
+              student_id: this.student.student_id,
+              semester_id: this.selectedSemester,
+              subject_code: this.selectedSubject.code,
+              new_grade: parseFloat(this.newGrade),
+              email: this.email
+            };
+            console.log(payload);
+
+            if (!payload.student_id || !payload.semester_id || !payload.subject_code || !payload.new_grade || !payload.email) {
+              alert('All fields are required!');
+              return;
+            }
+
+            const res = await axios.post('update_grade_handler.php', payload);
+            alert(res.data.message);
+            this.showModal = false;
+            this.fetchStudent(this.selectedSemester); // refresh student data
+          } catch (err) {
+            alert('Update failed');
+          }
+        }
+      }
+    }).mount('#app');
+  </script>
+</body>
+</html>

@@ -1,0 +1,7 @@
+{
+    "require": {
+        "mongodb/mongodb": "^1.16",
+        "twilio/sdk": "^8.6",
+        "phpmailer/phpmailer": "^6.10"
+    }
+}
